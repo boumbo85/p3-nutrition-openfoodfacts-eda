@@ -102,6 +102,7 @@ streamlit run app/streamlit_app.py
 - **Statistical tests cover only the 17%** of products with a food group; they don't generalise to the ungraded majority.
 - **Fibre zeros are imputed** (§5): any fibre-specific claim would need the raw, un-imputed field.
 - Crowdsourced data skews toward **processed, branded products**.
+- **Two Nutri-Score inputs are missing by construction — and deliberately not back-filled.** Salt/sodium and the fruit-vegetable % are absent from this 2022 extract, which is why the nutrients-only reconstruction carries a −4.18-point bias (§7). They are *not* recovered from a current Open Food Facts export: the database keeps no dated historical dump ([OFF support](https://support.openfoodfacts.org/help/fr-fr/12-donnees-api/105-comment-puis-je-acceder-aux-donnees-historiques)), so grafting 2024+ salt onto 2022 composition would mix two record versions — a temporal leak. This extract is therefore **frozen at its 2022 vintage** (tag `v1.0-2022-biochem`); the salt + fruit/veg enrichment lives in the single-vintage 2026 rebuild, where every field comes from the same snapshot.
 
 ## 10. Conclusion
 
@@ -227,6 +228,7 @@ Un rappel qu'un label public bien conçu repose sur des entrées qu'un jeu de do
 - **Tests statistiques limités aux 17 %** de produits avec groupe.
 - **Zéros de fibres imputés** (§5).
 - Données biaisées vers les **produits transformés**.
+- **Deux entrées du Nutri-Score manquent par construction — et ne sont volontairement pas rattrapées.** Le sel/sodium et le % fruits-légumes sont absents de cet extrait 2022, d'où le biais de −4,18 points de la reconstruction nutriments-seuls (§7). On ne va *pas* les chercher dans un export Open Food Facts courant : la base ne conserve aucun dump historique daté ([support OFF](https://support.openfoodfacts.org/help/fr-fr/12-donnees-api/105-comment-puis-je-acceder-aux-donnees-historiques)), donc greffer le sel de 2024+ sur une composition de 2022 mélangerait deux versions d'une même fiche — une fuite temporelle. Cet extrait est donc **figé à son millésime 2022** (tag `v1.0-2022-biochem`) ; l'enrichissement sel + fruits/légumes vit dans la refonte 2026 à millésime unique, où chaque champ vient du même instantané.
 
 ## 10. Conclusion
 
