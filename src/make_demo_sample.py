@@ -18,7 +18,9 @@ import pandas as pd
 KEEP = [
     "product_name", "brands", "nutrition_grade_fr", "nutrition-score-fr_100g",
     "energy_100g", "fat_100g", "saturated-fat_100g", "carbohydrates_100g",
-    "sugars_100g", "fiber_100g", "proteins_100g", "pnns_groups_1", "pnns_groups_2",
+    "sugars_100g", "fiber_100g", "proteins_100g",
+    "salt_100g", "sodium_100g", "fruits_veg_100g",   # 2026 enrichment inputs
+    "pnns_groups_1",
 ]
 
 
