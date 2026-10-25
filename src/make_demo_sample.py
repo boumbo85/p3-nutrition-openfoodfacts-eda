@@ -18,7 +18,7 @@ import pandas as pd
 KEEP = [
     "product_name", "brands", "nutrition_grade_fr", "nutrition-score-fr_100g",
     "energy_100g", "fat_100g", "saturated-fat_100g", "carbohydrates_100g",
-    "sugars_100g", "fiber_100g", "proteins_100g", "pnns_groups_1",
+    "sugars_100g", "fiber_100g", "proteins_100g", "pnns_groups_1", "pnns_groups_2",
 ]
 
 

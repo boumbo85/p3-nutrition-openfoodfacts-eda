@@ -94,6 +94,20 @@ def main() -> None:
     row = df.loc[choice]
     st.subheader(str(row["product_name"]))
 
+    # Brand + food-group context (the dataset's categories; no finer label exists).
+    brand = row.get("brands")
+    g1 = row.get("pnns_groups_1")
+    g2 = row.get("pnns_groups_2")
+    bits = []
+    if pd.notna(brand) and str(brand).strip():
+        bits.append(f"🏷️ {str(brand).strip()}")
+    cats = " · ".join(str(g).strip() for g in (g1, g2)
+                      if pd.notna(g) and str(g).strip().lower() not in ("", "unknown", "nan"))
+    if cats:
+        bits.append(f"📂 {cats}")
+    if bits:
+        st.caption("  ·  ".join(bits))
+
     c1, c2, c3 = st.columns(3)
     official = str(row.get("nutrition_grade_fr", "")).lower().strip()
     recon = str(row.get("recon_grade", "")).lower().strip()
@@ -122,8 +136,10 @@ def main() -> None:
         if alt.empty:
             st.info("Already among the best in its category — no healthier swap found.")
         else:
-            show = alt[["product_name", "nutrition_grade_fr", "nutrition-score-fr_100g"]].copy()
-            show.columns = ["Product", "Grade", "Official score"]
+            alt_cols = ["product_name", "brands", "nutrition_grade_fr", "nutrition-score-fr_100g"]
+            alt_cols = [c for c in alt_cols if c in alt.columns]
+            show = alt[alt_cols].copy()
+            show.columns = ["Product", "Brand", "Grade", "Official score"][:len(alt_cols)]
             st.dataframe(show, hide_index=True, use_container_width=True)
 
     st.divider()
