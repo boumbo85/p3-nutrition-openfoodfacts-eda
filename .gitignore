@@ -1,0 +1,27 @@
+# ─── Données (volumineuses, non versionnées — voir data/README.md) ───
+data/*.csv
+data/*.tsv
+*.zip
+
+# ─── Gros binaires (slides de soutenance — hors versionnement) ───
+docs/presentation.pdf
+
+# ─── Python ──────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+.venv/
+venv/
+env/
+*ENV/
+*.egg-info/
+.ruff_cache/
+.pytest_cache/
+
+# ─── OS / éditeurs ───────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+~$*
