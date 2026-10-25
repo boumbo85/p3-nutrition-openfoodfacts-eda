@@ -101,15 +101,17 @@ def build_query(source: str, limit: int | None = None) -> str:
         SELECT
             code,
             -- French product name, fallback EN, fallback first available
-            COALESCE(
+            -- strip embedded newlines/tabs: free-text OFF names contain them,
+            -- which would split a product across two CSV rows on re-read.
+            regexp_replace(COALESCE(
                 (SELECT pn.text FROM UNNEST(product_name) AS t(pn)
                  WHERE pn.lang = 'fr' AND pn.text IS NOT NULL LIMIT 1),
                 (SELECT pn.text FROM UNNEST(product_name) AS t(pn)
                  WHERE pn.lang = 'en' AND pn.text IS NOT NULL LIMIT 1),
                 (SELECT pn.text FROM UNNEST(product_name) AS t(pn)
                  WHERE pn.text IS NOT NULL LIMIT 1)
-            ) AS product_name,
-            brands,
+            ), '[\r\n\t]+', ' ', 'g') AS product_name,
+            regexp_replace(COALESCE(brands, ''), '[\r\n\t]+', ' ', 'g') AS brands,
             serving_size,
             nutriscore_grade AS nutrition_grade_fr,
             -- official Nutri-Score points: the plain top-level column

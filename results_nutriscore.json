@@ -2,16 +2,16 @@
   "validation_nutrients_only": {
     "n": 457745,
     "exact_score_agreement": 0.05138668909545708,
-    "mae_score": 6.398344056188489,
-    "signed_bias": -4.827901997837224,
+    "mae_score": 6.398346240810932,
+    "signed_bias": -4.827904182459666,
     "grade_agreement": 0.4043102600793018,
     "grade_within_one": 0.7753574588471748
   },
   "validation_full": {
     "n": 457745,
     "exact_score_agreement": 0.08270980567783373,
-    "mae_score": 3.542116243760172,
-    "signed_bias": -1.6843657494893445,
+    "mae_score": 3.5421184283826146,
+    "signed_bias": -1.6843679341117872,
     "grade_agreement": 0.6114080983953948,
     "grade_within_one": 0.9514751663043834
   },
@@ -44,7 +44,7 @@
     },
     "fats-and-sauces": {
       "mean_error": -3.37,
-      "n": 30895
+      "n": 30896
     },
     "milk-and-dairy-products": {
       "mean_error": -1.39,
