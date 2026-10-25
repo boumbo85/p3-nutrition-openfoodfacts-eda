@@ -24,10 +24,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 import nutriscore as N  # noqa: E402
 
 _DATA_DIR = Path(__file__).resolve().parents[1] / "data"
-# Prefer the full clean extract locally; fall back to the small versioned
+# Prefer the full clean 2026 extract locally; fall back to the small versioned
 # sample that ships with the repo (so the deployed demo works without the
-# gitignored 20 MB file).
-_CANDIDATES = ["physically_clean.csv", "clean_df_col_nrj7.csv", "demo_sample.csv"]
+# gitignored extract).
+_CANDIDATES = ["physically_clean_2026.csv", "demo_sample.csv"]
 GRADE_COLORS = {"a": "#2ecc71", "b": "#a3d65c", "c": "#f5c518", "d": "#f08a24", "e": "#e74c3c"}
 
 
@@ -38,7 +38,10 @@ def load() -> pd.DataFrame:
         if p.exists():
             df = pd.read_csv(p, low_memory=False)
             df = df[df["product_name"].astype("string").str.len() >= 2]
-            return N.reconstruct(df)
+            # Full reconstruction (salt + fruit/veg) is the 2026 headline; keep
+            # the nutrients-only one too, to show the gap the two inputs close.
+            df = N.reconstruct(df)
+            return N.reconstruct_full(df)
     st.error("No dataset found in data/ (expected demo_sample.csv at least).")
     st.stop()
 
@@ -58,10 +61,12 @@ def points_table(row: pd.Series) -> pd.DataFrame:
         "Energy": N._ladder_points(num("energy_100g"), N._ENERGY_KJ),
         "Sugars": N._ladder_points(num("sugars_100g"), N._SUGARS_G),
         "Saturated fat": N._ladder_points(num("saturated-fat_100g"), N._SATFAT_G),
+        "Salt (sodium)": N.sodium_points_from_salt(num("salt_100g")),
     }
     pos = {
         "Fibre": N.fibre_points(num("fiber_100g")),
         "Protein": N.protein_points(num("proteins_100g")),
+        "Fruit / veg": N.fruitveg_points(num("fruits_veg_100g")),
     }
     rows = [{"Component": k, "Effect": "penalty (+)", "Points": v} for k, v in neg.items()]
     rows += [{"Component": k, "Effect": "bonus (−)", "Points": v} for k, v in pos.items()]
@@ -94,36 +99,36 @@ def main() -> None:
     row = df.loc[choice]
     st.subheader(str(row["product_name"]))
 
-    # Brand + food-group context (the dataset's categories; no finer label exists).
+    # Brand + food-group context (the dataset's PNNS-1 root category).
     brand = row.get("brands")
     g1 = row.get("pnns_groups_1")
-    g2 = row.get("pnns_groups_2")
     bits = []
     if pd.notna(brand) and str(brand).strip():
         bits.append(f"🏷️ {str(brand).strip()}")
-    cats = " · ".join(str(g).strip() for g in (g1, g2)
-                      if pd.notna(g) and str(g).strip().lower() not in ("", "unknown", "nan"))
-    if cats:
-        bits.append(f"📂 {cats}")
+    if pd.notna(g1) and str(g1).strip().lower() not in ("", "unknown", "nan"):
+        bits.append(f"📂 {str(g1).strip()}")
     if bits:
         st.caption("  ·  ".join(bits))
 
     c1, c2, c3 = st.columns(3)
     official = str(row.get("nutrition_grade_fr", "")).lower().strip()
-    recon = str(row.get("recon_grade", "")).lower().strip()
+    recon_only = str(row.get("recon_grade", "")).lower().strip()
+    recon_full = str(row.get("recon_grade_full", "")).lower().strip()
     with c1:
         st.markdown("**Official grade**")
         st.markdown(grade_badge(official), unsafe_allow_html=True)
     with c2:
-        st.markdown("**Reconstructed (nutrients only)**")
-        st.markdown(grade_badge(recon), unsafe_allow_html=True)
+        st.markdown("**Reconstructed — full**")
+        st.markdown(grade_badge(recon_full), unsafe_allow_html=True)
+        st.caption(f"nutrients only would say **{recon_only.upper() or '—'}** "
+                   "(before salt + fruit/veg)")
     with c3:
         off_s = pd.to_numeric(pd.Series([row.get("nutrition-score-fr_100g")]), errors="coerce").iloc[0]
-        delta = None if pd.isna(off_s) else int(row["recon_score"] - off_s)
-        st.metric("Reconstructed score", int(row["recon_score"]),
+        delta = None if pd.isna(off_s) else int(row["recon_score_full"] - off_s)
+        st.metric("Reconstructed score (full)", int(row["recon_score_full"]),
                   delta=None if delta is None else f"{delta:+d} vs official",
-                  help="Positive = our nutrients-only score is harsher than the official one "
-                       "(usually because salt and fruit/veg % are missing).")
+                  help="Full reconstruction uses salt and fruit/veg %. A residual gap "
+                       "is expected (fruit/veg often missing; OFF mixes the 2017/2023 grids).")
 
     st.divider()
     left, right = st.columns([1, 1])

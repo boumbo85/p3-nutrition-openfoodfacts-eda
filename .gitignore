@@ -1,6 +1,7 @@
 # ─── Données (volumineuses, non versionnées — voir data/README.md) ───
 data/*.csv
 data/*.tsv
+data/*.parquet
 *.zip
 # Exception : l'échantillon léger de démo EST versionné (pour Streamlit Cloud)
 !data/demo_sample.csv

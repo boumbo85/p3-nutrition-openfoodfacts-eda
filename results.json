@@ -1,108 +1,108 @@
 {
-  "n_products": 155395,
-  "n_columns": 17,
+  "n_products": 880087,
+  "n_columns": 18,
   "completeness": {
-    "energy_100g": 0.9982238810772548,
-    "fat_100g": 0.9955983139740661,
-    "saturated-fat_100g": 0.8926670742301875,
-    "carbohydrates_100g": 0.9961710479745165,
-    "sugars_100g": 0.9478812059590077,
-    "fiber_100g": 1.0,
-    "proteins_100g": 0.9940345570964316,
-    "nutrition_grade_fr": 0.8613082789021526
+    "energy_100g": 0.9996261733215012,
+    "fat_100g": 0.9952993283618551,
+    "saturated-fat_100g": 0.9878296122996931,
+    "carbohydrates_100g": 0.9956072524648132,
+    "sugars_100g": 0.9908009094555424,
+    "fiber_100g": 0.4319572951310495,
+    "proteins_100g": 0.9971980042882124,
+    "nutrition_grade_fr": 0.9999909099895806
   },
   "impossible_rows_remaining": 0,
-  "sugar_over_carbs_rows": 521,
+  "sugar_over_carbs_rows": 0,
   "nutriscore_grades": {
-    "a": 21059,
-    "b": 20478,
-    "c": 28387,
-    "d": 38375,
-    "e": 25544
+    "a": 60238,
+    "b": 46373,
+    "c": 95889,
+    "d": 123108,
+    "e": 132137
   },
   "statistical_tests": {
     "food_group_col": "pnns_groups_1",
-    "n_with_food_group": 26870,
+    "n_with_food_group": 460831,
     "anova_nutrient_by_group": {
       "energy_100g": {
         "nutrient": "energy_100g",
-        "n": 26830,
+        "n": 460599,
         "n_groups": 11,
-        "F": 4342.91,
+        "F": 27844.19,
         "p_value": 0.0,
-        "eta2": 0.6182,
+        "eta2": 0.3768,
         "df_between": 10,
-        "df_within": 26819
+        "df_within": 460588
       },
       "fat_100g": {
         "nutrient": "fat_100g",
-        "n": 26629,
+        "n": 458984,
         "n_groups": 11,
-        "F": 1785.47,
+        "F": 18245.0,
         "p_value": 0.0,
-        "eta2": 0.4015,
+        "eta2": 0.2844,
         "df_between": 10,
-        "df_within": 26618
+        "df_within": 458973
       },
       "saturated-fat_100g": {
         "nutrient": "saturated-fat_100g",
-        "n": 25916,
+        "n": 455368,
         "n_groups": 11,
-        "F": 954.8,
+        "F": 9807.95,
         "p_value": 0.0,
-        "eta2": 0.2693,
+        "eta2": 0.1772,
         "df_between": 10,
-        "df_within": 25905
+        "df_within": 455357
       },
       "carbohydrates_100g": {
         "nutrient": "carbohydrates_100g",
-        "n": 26612,
+        "n": 458913,
         "n_groups": 11,
-        "F": 5884.26,
+        "F": 71375.05,
         "p_value": 0.0,
-        "eta2": 0.6887,
+        "eta2": 0.6087,
         "df_between": 10,
-        "df_within": 26601
+        "df_within": 458902
       },
       "sugars_100g": {
         "nutrient": "sugars_100g",
-        "n": 26025,
+        "n": 456770,
         "n_groups": 11,
-        "F": 3499.36,
+        "F": 50906.33,
         "p_value": 0.0,
-        "eta2": 0.5736,
+        "eta2": 0.5271,
         "df_between": 10,
-        "df_within": 26014
+        "df_within": 456759
       },
       "fiber_100g": {
         "nutrient": "fiber_100g",
-        "n": 26860,
+        "n": 244549,
         "n_groups": 11,
-        "F": 686.69,
+        "F": 4737.62,
         "p_value": 0.0,
-        "eta2": 0.2037,
+        "eta2": 0.1623,
         "df_between": 10,
-        "df_within": 26849
+        "df_within": 244538
       },
       "proteins_100g": {
         "nutrient": "proteins_100g",
-        "n": 26618,
+        "n": 459529,
         "n_groups": 11,
-        "F": 2424.06,
+        "F": 40851.61,
         "p_value": 0.0,
-        "eta2": 0.4767,
+        "eta2": 0.4706,
         "df_between": 10,
-        "df_within": 26607
+        "df_within": 459518
       }
     },
     "chi2_grade_by_group": {
-      "n": 25324,
-      "n_groups": 11,
-      "chi2": 16326.1,
+      "n": 423070,
+      "n_groups": 10,
+      "chi2": 200450.5,
       "p_value": 0.0,
-      "dof": 40,
-      "cramers_v": 0.4015
+      "dof": 36,
+      "cramers_v": 0.3442
     }
   },
-  "energy_vs_fat": 0.7638565144342936
+  "energy_vs_fat": 0.7943913790459204
 }

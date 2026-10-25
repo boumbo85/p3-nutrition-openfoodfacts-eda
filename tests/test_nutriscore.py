@@ -131,3 +131,126 @@ def test_reconstruct_routes_beverages():
     out = N.reconstruct(df)
     # the cola must now be graded on the beverage scale (D or E, not B)
     assert out.loc[0, "recon_grade"] in ("d", "e")
+
+
+# ── 2026 enrichment: sodium + fruit/veg points ──────────────────────────────
+
+def test_sodium_points_from_salt():
+    # salt 0 → sodium 0 mg → 0 pts. salt 2.5 g → 1000 mg → 10 pts (ladder maxes).
+    assert N.sodium_points_from_salt(0) == 0
+    assert N.sodium_points_from_salt(2.5) == 10          # 1000 mg sodium
+    # salt 0.25 g → 100 mg sodium → just above 90 → 1 pt
+    assert N.sodium_points_from_salt(0.25) == 1
+    assert N.sodium_points_from_salt(None) == 0          # missing → 0, documented
+
+
+def test_sodium_from_salt_matches_from_sodium():
+    # salt 1 g == sodium 0.4 g; both must score identically.
+    assert N.sodium_points_from_salt(1.0) == N.sodium_points_from_sodium(0.4)
+
+
+def test_fruitveg_points_thresholds():
+    assert N.fruitveg_points(0) == 0
+    assert N.fruitveg_points(40) == 0        # boundary inclusive-low
+    assert N.fruitveg_points(41) == 1
+    assert N.fruitveg_points(61) == 2
+    assert N.fruitveg_points(81) == 5
+    assert N.fruitveg_points(None) == 0      # missing → 0
+
+
+def test_full_score_salt_makes_salty_food_harsher():
+    # A salty-but-not-sugary food: nutrients-only misses the salt penalty.
+    nutrients_only = N.nutriscore_points(1500, 2, 3, 0, 8)
+    full = N.nutriscore_points_full(1500, 2, 3, salt_g=2.0, fibre_g=0,
+                                    protein_g=8, fruitveg_pct=0)
+    assert full > nutrients_only            # salt adds negative points
+
+
+def test_full_score_fruitveg_makes_produce_kinder():
+    # A fruit/veg product: the bonus must lower (improve) the score.
+    no_bonus = N.nutriscore_points_full(300, 8, 0, salt_g=0, fibre_g=2,
+                                        protein_g=1, fruitveg_pct=0)
+    with_bonus = N.nutriscore_points_full(300, 8, 0, salt_g=0, fibre_g=2,
+                                          protein_g=1, fruitveg_pct=90)
+    assert with_bonus < no_bonus
+
+
+def test_reconstruct_full_and_validation_full():
+    # Build rows whose full reconstruction equals the official score exactly.
+    # Row A: low everything, fruit/veg 90% → bonus 5. Row B: salty snack.
+    df = pd.DataFrame({
+        "pnns_groups_1": ["fruits-and-vegetables", "salty-snacks"],
+        "energy_100g": [300, 1500],
+        "sugars_100g": [8, 2],
+        "saturated-fat_100g": [0, 3],
+        "salt_100g": [0.0, 2.0],
+        "fiber_100g": [2, 0],
+        "proteins_100g": [1, 8],
+        "fruits_veg_100g": [90.0, 0.0],
+        "nutrition_grade_fr": ["a", "d"],
+    })
+    exp_a = N.nutriscore_points_full(300, 8, 0, 0.0, 2, 1, 90.0)
+    exp_b = N.nutriscore_points_full(1500, 2, 3, 2.0, 0, 8, 0.0)
+    df["nutrition-score-fr_100g"] = [exp_a, exp_b]
+    r = N.reconstruct_full(df)
+    assert r.loc[0, "recon_score_full"] == exp_a
+    v = N.validation_full(df)
+    assert v["n"] == 2
+    assert v["exact_score_agreement"] == 1.0
+    assert v["signed_bias"] == 0.0
+
+
+def test_fill_rates_reports_missing():
+    df = pd.DataFrame({
+        "salt_100g": [1.0, None, 2.0, None],
+        "fruits_veg_100g": [None, None, 50.0, 10.0],
+        "nutrition-score-fr_100g": [1, 2, 3, 4],
+    })
+    fr = N.fill_rates(df)
+    assert fr["salt_100g"] == 0.5
+    assert fr["fruits_veg_100g"] == 0.5
+    assert fr["nutrition-score-fr_100g"] == 1.0
+
+
+def test_validation_ignores_non_ae_grades():
+    # Regression guard: OFF ships many 'unknown' / 'not-applicable' grades.
+    # Validation must score ONLY the real a–e rows, never those placeholders.
+    # Two gradable rows (official score == our reconstruction) + three junk rows
+    # whose official score is absent, exactly as in the real dump.
+    exp_a = N.nutriscore_points(300, 0, 0, 5, 9)      # -> a
+    exp_e = N.nutriscore_points(9999, 100, 100, 0, 9)  # -> e
+    df = pd.DataFrame({
+        "pnns_groups_1": ["cereals", "sugary-snacks", "x", "y", "z"],
+        "energy_100g": [300, 9999, 500, 600, 700],
+        "sugars_100g": [0, 100, 1, 1, 1],
+        "saturated-fat_100g": [0, 100, 0, 0, 0],
+        "fiber_100g": [5, 0, 0, 0, 0],
+        "proteins_100g": [9, 9, 1, 1, 1],
+        "nutrition_grade_fr": ["a", "e", "unknown", "not-applicable", None],
+        "nutrition-score-fr_100g": [exp_a, exp_e, None, None, None],
+    })
+    v = N.validation(df)
+    # Only the two a–e rows with an official score are counted.
+    assert v["n"] == 2
+    assert v["exact_score_agreement"] == 1.0
+    assert v["grade_agreement"] == 1.0
+
+
+def test_validation_full_ignores_non_ae_grades():
+    # Same guard for the enriched (salt + fruit/veg) validation path.
+    exp = N.nutriscore_points_full(1500, 2, 3, 2.0, 0, 8, 0.0)
+    df = pd.DataFrame({
+        "pnns_groups_1": ["salty-snacks", "beverages", "x"],
+        "energy_100g": [1500, 100, 500],
+        "sugars_100g": [2, 10, 1],
+        "saturated-fat_100g": [3, 0, 0],
+        "salt_100g": [2.0, 0.0, 0.0],
+        "fiber_100g": [0, 0, 0],
+        "proteins_100g": [8, 0, 1],
+        "fruits_veg_100g": [0.0, 0.0, 0.0],
+        "nutrition_grade_fr": ["d", "unknown", "not-applicable"],
+        "nutrition-score-fr_100g": [exp, None, None],
+    })
+    v = N.validation_full(df)
+    assert v["n"] == 1                 # only the single a–e row is scored
+    assert v["exact_score_agreement"] == 1.0

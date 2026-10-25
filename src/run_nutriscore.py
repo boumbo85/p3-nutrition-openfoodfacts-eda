@@ -82,6 +82,38 @@ def fig_bias(bias: dict, out: Path) -> None:
     _save(fig, out, "nutriscore_bias_by_group")
 
 
+def fig_two_step(v1: dict, v2: dict, out: Path) -> None:
+    """The money shot: how adding salt + fruit/veg closes the gap to official.
+
+    Grouped bars for the two metrics that matter most — grade agreement and
+    off-by-one-grade rate — nutrients-only vs the full reconstruction.
+    """
+    labels = ["grade\nagreement", "grade\nwithin ±1", "exact score\nagreement"]
+    step1 = [v1["grade_agreement"], v1["grade_within_one"], v1["exact_score_agreement"]]
+    step2 = [v2["grade_agreement"], v2["grade_within_one"], v2["exact_score_agreement"]]
+    x = range(len(labels))
+    w = 0.38
+    fig, ax = plt.subplots(figsize=(6.5, 4.2))
+    b1 = ax.bar([i - w / 2 for i in x], [s * 100 for s in step1], w,
+                label="nutrients only", color="#64748b", edgecolor=BG)
+    b2 = ax.bar([i + w / 2 for i in x], [s * 100 for s in step2], w,
+                label="+ salt + fruit/veg", color=ACCENT, edgecolor=BG)
+    ax.set_xticks(list(x))
+    ax.set_xticklabels(labels)
+    ax.set_ylabel("agreement with official grade (%)")
+    ax.set_ylim(0, 100)
+    ax.set_title("Recovering the two missing inputs closes the gap")
+    ax.legend(frameon=False)
+    ax.spines[["top", "right"]].set_visible(False)
+    ax.grid(axis="y", alpha=0.3)
+    for bars in (b1, b2):
+        for bar in bars:
+            h = bar.get_height()
+            ax.text(bar.get_x() + bar.get_width() / 2, h + 1.5, f"{h:.0f}",
+                    ha="center", va="bottom", fontsize=8, color=FG)
+    _save(fig, out, "nutriscore_two_step")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", type=Path, required=True)
@@ -93,12 +125,22 @@ def main() -> None:
     df = pd.read_csv(args.data, low_memory=False)
     print(f"Loaded {len(df):,} products")
 
-    val = N.validation(df)
+    # Two-step validation: nutrients-only, then + salt + fruit/veg.
+    val_step1 = N.validation(df)
+    has_enrichment = {"salt_100g", "fruits_veg_100g"}.issubset(df.columns)
+    val_step2 = N.validation_full(df) if has_enrichment else None
     bias = N.bias_by_group(df, min_group_n=100)
     fig_confusion(df, args.out)
     fig_bias(bias, args.out)
+    if val_step2 is not None:
+        fig_two_step(val_step1, val_step2, args.out)
 
-    results = {"validation": val, "bias_by_group": bias}
+    results = {
+        "validation_nutrients_only": val_step1,
+        "validation_full": val_step2,
+        "fill_rates": N.fill_rates(df) if has_enrichment else None,
+        "bias_by_group": bias,
+    }
     args.results.write_text(json.dumps(results, indent=2))
     print(json.dumps(results, indent=2))
     print(f"\nDone. Figures -> {args.out}, numbers -> {args.results}")

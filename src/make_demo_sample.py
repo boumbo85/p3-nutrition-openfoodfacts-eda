@@ -18,7 +18,9 @@ import pandas as pd
 KEEP = [
     "product_name", "brands", "nutrition_grade_fr", "nutrition-score-fr_100g",
     "energy_100g", "fat_100g", "saturated-fat_100g", "carbohydrates_100g",
-    "sugars_100g", "fiber_100g", "proteins_100g", "pnns_groups_1", "pnns_groups_2",
+    "sugars_100g", "fiber_100g", "proteins_100g",
+    "salt_100g", "sodium_100g", "fruits_veg_100g",   # 2026 enrichment inputs
+    "pnns_groups_1",
 ]
 
 
@@ -34,10 +36,13 @@ def main() -> None:
     cols = [c for c in KEEP if c in df.columns]
     sub = df[cols].copy()
 
-    # Keep usable, demo-friendly rows: real name + official grade + food group.
+    # Keep usable, demo-friendly rows: real name + a real A–E grade + food group.
+    # Products graded 'unknown'/'not-applicable' would show an empty official
+    # badge in the demo, so they are excluded from the sample (not the analysis).
+    grade = sub["nutrition_grade_fr"].astype("string").str.lower().str.strip()
     sub = sub[
         sub["product_name"].astype("string").str.len().ge(2)
-        & sub["nutrition_grade_fr"].notna()
+        & grade.isin(list("abcde"))
         & sub["pnns_groups_1"].notna()
         & ~sub["pnns_groups_1"].astype("string").str.lower().isin(["unknown", "", "nan"])
     ]
