@@ -17,6 +17,30 @@
   "n_after_clean": 880087,
   "n_removed": 76427,
   "pct_removed": 7.99,
+  "n_biochemical_violations": 7154,
+  "pct_biochemical": 0.748,
   "atwater_flagged_kept": 5191,
+  "bootstrap_hard_rate": {
+    "which": "hard",
+    "n": 956514,
+    "point_rate": 0.079902,
+    "point_pct": 7.99,
+    "ci_level": 0.95,
+    "ci_low_pct": 7.94,
+    "ci_high_pct": 8.042,
+    "n_boot": 1000,
+    "seed": 42
+  },
+  "bootstrap_biochemical_rate": {
+    "which": "biochemical",
+    "n": 956514,
+    "point_rate": 0.007479,
+    "point_pct": 0.748,
+    "ci_level": 0.95,
+    "ci_low_pct": 0.731,
+    "ci_high_pct": 0.765,
+    "n_boot": 1000,
+    "seed": 42
+  },
   "output_csv": "../data/physically_clean_2026.csv"
 }

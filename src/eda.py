@@ -330,7 +330,13 @@ def physically_clean(df: pd.DataFrame) -> pd.DataFrame:
     dropped here — they are flagged by :func:`atwater_inconsistency` for review,
     since we cannot know whether the energy or a macro is the wrong field.
     """
-    drop = (
+    drop = hard_violation_mask(df)
+    return df[~drop].copy()
+
+
+def hard_violation_mask(df: pd.DataFrame) -> pd.Series:
+    """Boolean mask of the hard impossibilities dropped by :func:`physically_clean`."""
+    return (
         flag_impossible_nutrients(df)
         | sugar_consistency(df)
         | satfat_consistency(df)
@@ -339,7 +345,70 @@ def physically_clean(df: pd.DataFrame) -> pd.DataFrame:
         | empty_product(df)
         | invalid_product_name(df)
     )
-    return df[~drop].copy()
+
+
+def biochemical_violation_mask(df: pd.DataFrame) -> pd.Series:
+    """Hard violations **excluding empty records and unusable names**.
+
+    The empty-record ('ghost') and invalid-name flags are data-entry artefacts,
+    not biochemistry. Separating them matters for honest reporting: on the 2026
+    crowdsourced dump empty records dominate the raw flag count, which would
+    otherwise inflate the headline 'physically impossible' rate. This mask keeps
+    only the violations the biochemical laws actually catch.
+    """
+    return (
+        flag_impossible_nutrients(df)
+        | sugar_consistency(df)
+        | satfat_consistency(df)
+        | mass_balance_violation(df)
+        | energy_below_floor(df)
+    )
+
+
+def bootstrap_flag_rate(
+    df: pd.DataFrame,
+    which: str = "hard",
+    n_boot: int = 1000,
+    ci: float = 0.95,
+    seed: int = 42,
+) -> dict:
+    """Bootstrap confidence interval on the flag rate — the seuils' robustness.
+
+    The cleaning thresholds are expert choices (§ README limits); a reviewer
+    will ask how stable the resulting flag rate is. Resampling products with
+    replacement and recomputing the share flagged gives a distribution-free CI
+    around it, turning "5.24%" into "5.24% [CI_low, CI_high]". ``which`` selects
+    the ``hard`` mask (everything dropped) or the ``biochemical`` subset (the
+    laws only, excluding empty/invalid-name artefacts). The seed is fixed for
+    reproducibility (a drifting CI between runs would itself be a red flag).
+    """
+    import numpy as np
+
+    mask = (biochemical_violation_mask(df) if which == "biochemical"
+            else hard_violation_mask(df)).to_numpy()
+    n = mask.size
+    if n == 0:
+        return {}
+    rng = np.random.default_rng(seed)
+    point = float(mask.mean())
+    # Resample indices in blocks to bound memory on ~1M-row frames.
+    boots = np.empty(n_boot, dtype=float)
+    for i in range(n_boot):
+        idx = rng.integers(0, n, size=n)
+        boots[i] = mask[idx].mean()
+    lo = float(np.quantile(boots, (1 - ci) / 2))
+    hi = float(np.quantile(boots, 1 - (1 - ci) / 2))
+    return {
+        "which": which,
+        "n": int(n),
+        "point_rate": round(point, 6),
+        "point_pct": round(100 * point, 3),
+        "ci_level": ci,
+        "ci_low_pct": round(100 * lo, 3),
+        "ci_high_pct": round(100 * hi, 3),
+        "n_boot": n_boot,
+        "seed": seed,
+    }
 
 
 def nutriscore_grade_counts(df: pd.DataFrame, col: str = "nutrition_grade_fr") -> dict:

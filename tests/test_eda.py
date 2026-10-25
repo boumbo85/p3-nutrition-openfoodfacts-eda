@@ -253,3 +253,34 @@ def test_invalid_product_name():
         "",                     # blank
     ]})
     assert E.invalid_product_name(df).tolist() == [False, True, True, True, True, True]
+
+
+def test_biochemical_mask_excludes_empty_and_names():
+    # An empty 'ghost' row is a hard violation but NOT a biochemical one.
+    df = pd.DataFrame({
+        "product_name": ["Milk", "ghost"],
+        "energy_100g": [300, 0],
+        "fat_100g": [3, 0],
+        "saturated-fat_100g": [2, 0],
+        "carbohydrates_100g": [5, 0],
+        "sugars_100g": [5, 0],
+        "proteins_100g": [3, 0],
+        "fiber_100g": [0, 0],
+    })
+    assert E.hard_violation_mask(df).tolist() == [False, True]        # ghost dropped
+    assert E.biochemical_violation_mask(df).tolist() == [False, False]  # not biochem
+
+
+def test_bootstrap_flag_rate_is_reproducible_and_brackets_point():
+    # 10% of rows are impossible (sugars > carbs). The CI must bracket 0.10
+    # and be identical across runs with the same seed.
+    n = 500
+    df = pd.DataFrame({
+        "sugars_100g": [80.0 if i < 50 else 5.0 for i in range(n)],
+        "carbohydrates_100g": [60.0] * n,     # first 50 rows: sugars > carbs
+    })
+    r1 = E.bootstrap_flag_rate(df, which="hard", n_boot=200, seed=7)
+    r2 = E.bootstrap_flag_rate(df, which="hard", n_boot=200, seed=7)
+    assert r1 == r2                                   # reproducible (seed fixed)
+    assert abs(r1["point_pct"] - 10.0) < 1e-6
+    assert r1["ci_low_pct"] < 10.0 < r1["ci_high_pct"]
