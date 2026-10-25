@@ -210,3 +210,47 @@ def test_fill_rates_reports_missing():
     assert fr["salt_100g"] == 0.5
     assert fr["fruits_veg_100g"] == 0.5
     assert fr["nutrition-score-fr_100g"] == 1.0
+
+
+def test_validation_ignores_non_ae_grades():
+    # Regression guard: OFF ships many 'unknown' / 'not-applicable' grades.
+    # Validation must score ONLY the real a–e rows, never those placeholders.
+    # Two gradable rows (official score == our reconstruction) + three junk rows
+    # whose official score is absent, exactly as in the real dump.
+    exp_a = N.nutriscore_points(300, 0, 0, 5, 9)      # -> a
+    exp_e = N.nutriscore_points(9999, 100, 100, 0, 9)  # -> e
+    df = pd.DataFrame({
+        "pnns_groups_1": ["cereals", "sugary-snacks", "x", "y", "z"],
+        "energy_100g": [300, 9999, 500, 600, 700],
+        "sugars_100g": [0, 100, 1, 1, 1],
+        "saturated-fat_100g": [0, 100, 0, 0, 0],
+        "fiber_100g": [5, 0, 0, 0, 0],
+        "proteins_100g": [9, 9, 1, 1, 1],
+        "nutrition_grade_fr": ["a", "e", "unknown", "not-applicable", None],
+        "nutrition-score-fr_100g": [exp_a, exp_e, None, None, None],
+    })
+    v = N.validation(df)
+    # Only the two a–e rows with an official score are counted.
+    assert v["n"] == 2
+    assert v["exact_score_agreement"] == 1.0
+    assert v["grade_agreement"] == 1.0
+
+
+def test_validation_full_ignores_non_ae_grades():
+    # Same guard for the enriched (salt + fruit/veg) validation path.
+    exp = N.nutriscore_points_full(1500, 2, 3, 2.0, 0, 8, 0.0)
+    df = pd.DataFrame({
+        "pnns_groups_1": ["salty-snacks", "beverages", "x"],
+        "energy_100g": [1500, 100, 500],
+        "sugars_100g": [2, 10, 1],
+        "saturated-fat_100g": [3, 0, 0],
+        "salt_100g": [2.0, 0.0, 0.0],
+        "fiber_100g": [0, 0, 0],
+        "proteins_100g": [8, 0, 1],
+        "fruits_veg_100g": [0.0, 0.0, 0.0],
+        "nutrition_grade_fr": ["d", "unknown", "not-applicable"],
+        "nutrition-score-fr_100g": [exp, None, None],
+    })
+    v = N.validation_full(df)
+    assert v["n"] == 1                 # only the single a–e row is scored
+    assert v["exact_score_agreement"] == 1.0
