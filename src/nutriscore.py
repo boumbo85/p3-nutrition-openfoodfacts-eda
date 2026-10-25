@@ -75,6 +75,51 @@ def fibre_points(fibre_g: float) -> int:
     return _ladder_points(fibre_g, _FIBRE_G)
 
 
+# ── 2026 enrichment: the two inputs the 2022 extract lacked ─────────────────
+# Sodium ladder (mg/100g), negative points 0..10, official 2017 step of 90 mg.
+_SODIUM_MG = [90, 180, 270, 360, 450, 540, 630, 720, 810, 900]
+
+
+def sodium_points_from_salt(salt_g: float) -> int:
+    """Negative sodium points (0–10) from salt in g/100g.
+
+    The Nutri-Score scores *sodium* in mg; Open Food Facts reports *salt* in g.
+    Salt is sodium chloride: sodium (mg) = salt (g) / 2.5 × 1000 = salt × 400.
+    This is the input missing from the 2022 extract — its absence is why the
+    nutrients-only score runs too lenient on salty foods (§7 of the README).
+    """
+    if salt_g is None or pd.isna(salt_g):
+        return 0
+    sodium_mg = float(salt_g) * 400.0
+    return _ladder_points(sodium_mg, _SODIUM_MG)
+
+
+def sodium_points_from_sodium(sodium_g: float) -> int:
+    """Negative sodium points (0–10) from sodium reported directly in g/100g."""
+    if sodium_g is None or pd.isna(sodium_g):
+        return 0
+    return _ladder_points(float(sodium_g) * 1000.0, _SODIUM_MG)
+
+
+def fruitveg_points(fruitveg_pct: float) -> int:
+    """Positive fruit/vegetable/nut points (0–5) from the % (0–100).
+
+    Official 2017 'general food' thresholds: >40% → 1, >60% → 2, >80% → 5.
+    The other missing 2022 input — its absence made the nutrients-only score
+    too harsh on fruit & vegetables (they never got their bonus).
+    """
+    if fruitveg_pct is None or pd.isna(fruitveg_pct):
+        return 0
+    v = float(fruitveg_pct)
+    if v > 80:
+        return 5
+    if v > 60:
+        return 2
+    if v > 40:
+        return 1
+    return 0
+
+
 def nutriscore_points(
     energy_kj: float,
     sugars_g: float,
@@ -95,6 +140,39 @@ def nutriscore_points(
     if n >= 11 and fruit_veg_pts < 5:
         return n - (fib + fruit_veg_pts)       # protein NOT subtracted
     return n - (fib + prot + fruit_veg_pts)
+
+
+def nutriscore_points_full(
+    energy_kj: float,
+    sugars_g: float,
+    satfat_g: float,
+    salt_g: float,
+    fibre_g: float,
+    protein_g: float,
+    fruitveg_pct: float,
+    is_beverage: bool = False,
+) -> int:
+    """Complete FSAm-NPS score using *all* official inputs (2026 enrichment).
+
+    Adds the two inputs the 2022 extract lacked — sodium (from salt) and the
+    fruit/vegetable % — and applies the real protein-exemption rule, which now
+    depends on the observed fruit/veg points instead of an assumption:
+    when N ≥ 11 **and** fruit/veg points < 5, protein points are not subtracted.
+    Beverages use the drink-specific energy & sugar ladders.
+    """
+    if is_beverage:
+        n = (_ladder_points(energy_kj, _BEV_ENERGY_KJ)
+             + _ladder_points(sugars_g, _BEV_SUGARS_G)
+             + _ladder_points(satfat_g, _SATFAT_G)
+             + sodium_points_from_salt(salt_g))
+    else:
+        n = negative_points(energy_kj, sugars_g, satfat_g) + sodium_points_from_salt(salt_g)
+    fib = fibre_points(fibre_g)
+    prot = protein_points(protein_g)
+    fv = fruitveg_points(fruitveg_pct)
+    if n >= 11 and fv < 5:
+        return n - (fib + fv)                  # protein NOT subtracted
+    return n - (fib + prot + fv)
 
 
 # ── Beverage grid (2017) — drinks follow a *different* ladder & cutoffs ─────
@@ -189,6 +267,42 @@ def reconstruct(df: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+# Columns needed for the *complete* 2026 reconstruction (adds salt + fruit/veg).
+_NUM_FULL = _NUM + ["salt_100g", "fruits_veg_100g"]
+
+
+def reconstruct_full(df: pd.DataFrame) -> pd.DataFrame:
+    """Add `recon_score_full` / `recon_grade_full` using *all* official inputs.
+
+    The 2026 counterpart to :func:`reconstruct`: it feeds salt (→ sodium) and the
+    fruit/vegetable % into the official grid, closing the two blind spots the
+    nutrients-only reconstruction leaves open. Requires `salt_100g` and
+    `fruits_veg_100g`; missing values contribute 0 points (documented honestly).
+    """
+    cols = {c: pd.to_numeric(df[c], errors="coerce")
+            for c in _NUM_FULL if c in df.columns}
+    for c in _NUM_FULL:                      # tolerate absent columns
+        cols.setdefault(c, pd.Series(float("nan"), index=df.index))
+    out = df.copy()
+    bev = _is_beverage(df).tolist()
+    scores = [
+        nutriscore_points_full(e, s, sf, salt, fi, pr, fv, is_beverage=b)
+        for b, e, s, sf, salt, fi, pr, fv in zip(
+            bev, cols["energy_100g"], cols["sugars_100g"],
+            cols["saturated-fat_100g"], cols["salt_100g"],
+            cols["fiber_100g"], cols["proteins_100g"], cols["fruits_veg_100g"],
+            strict=False,
+        )
+    ]
+    out["recon_score_full"] = scores
+    water = _is_water(df).tolist()
+    out["recon_grade_full"] = [
+        points_to_grade(sc, is_beverage=b, is_water=w)
+        for sc, b, w in zip(scores, bev, water, strict=False)
+    ]
+    return out
+
+
 def validation(df: pd.DataFrame) -> dict:
     """Compare reconstruction to the official score/grade (ground-truth rows only).
 
@@ -220,6 +334,62 @@ def validation(df: pd.DataFrame) -> dict:
         "grade_agreement": None if grade_ok is None else float(grade_ok),
         "grade_within_one": off_by1,
     }
+
+
+def _compare_to_official(
+    df: pd.DataFrame, score_col: str, grade_col: str
+) -> dict:
+    """Shared metrics: compare a reconstructed score/grade to the official one."""
+    off = pd.to_numeric(df.get("nutrition-score-fr_100g"), errors="coerce")
+    grade = df.get("nutrition_grade_fr")
+    grade = grade.astype("string").str.lower().str.strip() if grade is not None else None
+    m = off.notna() & df[score_col].notna()
+    if grade is not None:
+        m &= grade.isin(list("abcde"))
+    sub = df[m]
+    diff = sub[score_col] - off[m]
+    grade_ok = (sub[grade_col] == grade[m]).mean() if grade is not None else None
+    _ord = {g: i for i, g in enumerate("abcde")}
+    off_by1 = None
+    if grade is not None:
+        d = (sub[grade_col].map(_ord) - grade[m].map(_ord)).abs()
+        off_by1 = float((d <= 1).mean())
+    return {
+        "n": int(m.sum()),
+        "exact_score_agreement": float((diff == 0).mean()),
+        "mae_score": float(diff.abs().mean()),
+        "signed_bias": float(diff.mean()),
+        "grade_agreement": None if grade_ok is None else float(grade_ok),
+        "grade_within_one": off_by1,
+    }
+
+
+def validation_full(df: pd.DataFrame) -> dict:
+    """Validate the *complete* reconstruction (salt + fruit/veg) vs the official.
+
+    The second of the two-step comparison: step 1 is nutrients-only
+    (:func:`validation`, carrying the −4 pt structural bias), step 2 adds the
+    two recovered inputs and should collapse that bias. The gap between the two
+    is the measured contribution of salt and fruit/veg to the Nutri-Score.
+    """
+    r = reconstruct_full(df)
+    return _compare_to_official(r, "recon_score_full", "recon_grade_full")
+
+
+def fill_rates(df: pd.DataFrame) -> dict:
+    """Fill rate of the enrichment inputs — the honesty check for step 2.
+
+    'Strong agreement' only means something on the rows that actually carry the
+    recovered inputs. This reports how many do, so the claim is scoped, not
+    overstated.
+    """
+    out = {}
+    for col in ("salt_100g", "sodium_100g", "fruits_veg_100g",
+                "nutrition-score-fr_100g"):
+        if col in df.columns:
+            v = pd.to_numeric(df[col], errors="coerce")
+            out[col] = round(float(v.notna().mean()), 4)
+    return out
 
 
 def healthier_alternative(df: pd.DataFrame, idx, n: int = 3) -> pd.DataFrame:
