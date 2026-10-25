@@ -1,3 +1,6 @@
 -r requirements.txt
+# Dev-only — linting, tests, and the legacy exploratory notebooks.
 ruff>=0.6
 pytest>=7.4
+jupyterlab>=3.5      # notebooks/legacy/ only (2022 exploratory work)
+seaborn>=0.12        # notebooks/legacy/ only
