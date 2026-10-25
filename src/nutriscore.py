@@ -97,14 +97,52 @@ def nutriscore_points(
     return n - (fib + prot + fruit_veg_pts)
 
 
+# ── Beverage grid (2017) — drinks follow a *different* ladder & cutoffs ─────
+# Nutri-Score rates beverages on their own scale: energy and sugars use lower,
+# drink-specific thresholds, and only water can score A. Ignoring this is why a
+# solid-grid reconstruction rates a sugary soda far too kindly (B instead of E).
+_BEV_ENERGY_KJ = [30, 90, 150, 210, 240, 270, 300, 330, 360]   # 0..10 points
+_BEV_SUGARS_G = [1.5, 3, 4.5, 6, 7.5, 9, 10.5, 12, 13.5]        # 0..10 points
+
+
+def beverage_points(energy_kj: float, sugars_g: float, satfat_g: float,
+                    fibre_g: float, protein_g: float) -> int:
+    """Reconstructed Nutri-Score for a beverage (2017 drink grid).
+
+    Negative points use the drink-specific energy & sugar ladders (much stricter
+    than for solids); positive points (fibre, protein) are capped as usual. The
+    protein-exemption rule applies the same way.
+    """
+    n = (_ladder_points(energy_kj, _BEV_ENERGY_KJ)
+         + _ladder_points(sugars_g, _BEV_SUGARS_G)
+         + _ladder_points(satfat_g, _SATFAT_G))
+    fib = fibre_points(fibre_g)
+    prot = protein_points(protein_g)
+    if n >= 11:
+        return n - fib
+    return n - (fib + prot)
+
+
 # Solid-food grade cutoffs (upper bound of each grade band).
 _GRADE_BANDS = [(-1, "a"), (2, "b"), (10, "c"), (18, "d")]
+# Beverage grade cutoffs: only water scores A; sugary drinks reach E fast.
+_BEV_GRADE_BANDS = [(1, "b"), (5, "c"), (9, "d")]
 
 
-def points_to_grade(points: float) -> str:
-    """Map an FSAm-NPS score to a solid-food Nutri-Score grade a–e."""
+def points_to_grade(points: float, is_beverage: bool = False, is_water: bool = False) -> str:
+    """Map a score to a Nutri-Score grade, using the beverage scale if needed.
+
+    Beverages: only water gets A; otherwise ≤1→B, 2–5→C, 6–9→D, ≥10→E.
+    """
     if points is None or pd.isna(points):
         return ""
+    if is_beverage:
+        if is_water:
+            return "a"
+        for upper, grade in _BEV_GRADE_BANDS:
+            if points <= upper:
+                return grade
+        return "e"
     for upper, grade in _GRADE_BANDS:
         if points <= upper:
             return grade
@@ -115,18 +153,39 @@ def points_to_grade(points: float) -> str:
 _NUM = ["energy_100g", "sugars_100g", "saturated-fat_100g", "fiber_100g", "proteins_100g"]
 
 
+def _is_beverage(df: pd.DataFrame) -> pd.Series:
+    """True where the product is a beverage (uses the drink Nutri-Score grid)."""
+    if GROUP_COL not in df.columns:
+        return pd.Series(False, index=df.index)
+    g = df[GROUP_COL].astype("string").str.lower().str.strip()
+    return g.eq("beverages").fillna(False)
+
+
+def _is_water(df: pd.DataFrame) -> pd.Series:
+    """True for plain water (scores A on the beverage grid): ~0 energy & sugar."""
+    e = pd.to_numeric(df.get("energy_100g"), errors="coerce").fillna(0)
+    s = pd.to_numeric(df.get("sugars_100g"), errors="coerce").fillna(0)
+    return _is_beverage(df) & (e <= 10) & (s <= 0.5)
+
+
 def reconstruct(df: pd.DataFrame) -> pd.DataFrame:
-    """Add `recon_score` and `recon_grade` columns from the nutrient fields."""
+    """Add `recon_score` and `recon_grade`, routing beverages to the drink grid."""
     cols = {c: pd.to_numeric(df[c], errors="coerce") for c in _NUM if c in df.columns}
     out = df.copy()
-    out["recon_score"] = [
-        nutriscore_points(e, s, sf, fi, pr)
-        for e, s, sf, fi, pr in zip(
-            cols["energy_100g"], cols["sugars_100g"], cols["saturated-fat_100g"],
-            cols["fiber_100g"], cols["proteins_100g"], strict=False,
-        )
+    bev = _is_beverage(df).tolist()
+    scores = []
+    for is_bev, e, s, sf, fi, pr in zip(
+        bev, cols["energy_100g"], cols["sugars_100g"], cols["saturated-fat_100g"],
+        cols["fiber_100g"], cols["proteins_100g"], strict=False,
+    ):
+        scores.append(beverage_points(e, s, sf, fi, pr) if is_bev
+                      else nutriscore_points(e, s, sf, fi, pr))
+    out["recon_score"] = scores
+    water = _is_water(df).tolist()
+    out["recon_grade"] = [
+        points_to_grade(sc, is_beverage=b, is_water=w)
+        for sc, b, w in zip(scores, bev, water, strict=False)
     ]
-    out["recon_grade"] = out["recon_score"].map(points_to_grade)
     return out
 
 

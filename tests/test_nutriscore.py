@@ -71,6 +71,8 @@ def test_reconstruct_and_validation_perfect_case():
 
 
 def test_bias_by_group_shape():
+    # Use solid-food groups so the solid grid applies (recon score = 0 here),
+    # keeping the expected error exact and independent of beverage routing.
     df = pd.DataFrame({
         "energy_100g": [300] * 200,
         "sugars_100g": [0] * 200,
@@ -78,11 +80,11 @@ def test_bias_by_group_shape():
         "fiber_100g": [0] * 200,
         "proteins_100g": [0] * 200,
         "nutrition-score-fr_100g": [5] * 200,     # official says 5, we'll say 0 → err -5
-        "pnns_groups_1": ["Beverages"] * 100 + ["Salty snacks"] * 100,
+        "pnns_groups_1": ["Composite foods"] * 100 + ["Salty snacks"] * 100,
     })
     b = N.bias_by_group(df, min_group_n=50)
-    assert set(b) == {"Beverages", "Salty snacks"}
-    assert b["Beverages"]["mean_error"] == -5.0
+    assert set(b) == {"Composite foods", "Salty snacks"}
+    assert b["Composite foods"]["mean_error"] == -5.0
 
 
 def test_healthier_alternative():
@@ -96,3 +98,36 @@ def test_healthier_alternative():
     assert alt["product_name"].tolist() == ["snack B", "snack C"]
     # snack B (score 5) is already the best of its group -> no healthier option
     assert N.healthier_alternative(df, 11).empty
+
+
+def test_beverage_grid_rates_soda_harshly():
+    # A sugary soda (Coca-like): ~180 kJ, 10.6 g sugar, no fat/fibre/protein.
+    # Solid grid would give ~2 pts -> B. Beverage grid must land it in D/E.
+    solid = N.nutriscore_points(180, 10.6, 0, 0, 0)
+    bev = N.beverage_points(180, 10.6, 0, 0, 0)
+    assert bev > solid                       # drinks grid is stricter on sugar
+    assert N.points_to_grade(bev, is_beverage=True) in ("d", "e")
+    assert N.points_to_grade(solid) in ("a", "b")   # the old, too-kind result
+
+
+def test_only_water_scores_A_on_beverage_grid():
+    assert N.points_to_grade(0, is_beverage=True, is_water=True) == "a"
+    # a zero-score drink that isn't water can't be A -> B
+    assert N.points_to_grade(0, is_beverage=True, is_water=False) == "b"
+
+
+def test_reconstruct_routes_beverages():
+    df = pd.DataFrame({
+        "product_name": ["Cola", "Cookie"],
+        "pnns_groups_1": ["Beverages", "Sugary snacks"],
+        "energy_100g": [180, 2000],
+        "sugars_100g": [10.6, 30],
+        "saturated-fat_100g": [0, 10],
+        "fiber_100g": [0, 2],
+        "proteins_100g": [0, 5],
+        "nutrition-score-fr_100g": [14, 20],
+        "nutrition_grade_fr": ["e", "e"],
+    })
+    out = N.reconstruct(df)
+    # the cola must now be graded on the beverage scale (D or E, not B)
+    assert out.loc[0, "recon_grade"] in ("d", "e")
