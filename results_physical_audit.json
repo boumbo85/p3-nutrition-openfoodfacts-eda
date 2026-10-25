@@ -1,22 +1,22 @@
 {
-  "n_total": 155395,
+  "n_total": 956514,
   "counts": {
-    "impossible_bounds": 0,
-    "sugars_over_carbs": 521,
-    "satfat_over_fat": 215,
-    "mass_balance_over_100": 1353,
-    "energy_below_floor": 2335,
-    "empty_product": 3834,
-    "invalid_name": 11,
-    "atwater_inconsistent": 2715,
-    "unit_error_kcal_as_kj": 797,
-    "dry_matter_implausible": 13340
+    "impossible_bounds": 261,
+    "sugars_over_carbs": 761,
+    "satfat_over_fat": 585,
+    "mass_balance_over_100": 2909,
+    "energy_below_floor": 2937,
+    "empty_product": 64713,
+    "invalid_name": 6429,
+    "atwater_inconsistent": 7709,
+    "unit_error_kcal_as_kj": 1894,
+    "dry_matter_implausible": 9359
   },
-  "n_hard_violations": 8141,
-  "fiber_zero_rate": 0.4526,
-  "n_after_clean": 147254,
-  "n_removed": 8141,
-  "pct_removed": 5.24,
-  "atwater_flagged_kept": 1395,
-  "output_csv": "data/physically_clean.csv"
+  "n_hard_violations": 76427,
+  "fiber_zero_rate": 0.246,
+  "n_after_clean": 880087,
+  "n_removed": 76427,
+  "pct_removed": 7.99,
+  "atwater_flagged_kept": 5191,
+  "output_csv": "../data/physically_clean_2026.csv"
 }
