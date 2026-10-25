@@ -1,0 +1,52 @@
+{
+  "validation": {
+    "n": 112748,
+    "exact_score_agreement": 0.2386561180686132,
+    "mae_score": 4.335757618760422,
+    "signed_bias": -4.182779295419874,
+    "grade_agreement": 0.47732110547415474,
+    "grade_within_one": 0.8404938446801717
+  },
+  "bias_by_group": {
+    "Fish Meat Eggs": {
+      "mean_error": -8.67,
+      "n": 2080
+    },
+    "Salty snacks": {
+      "mean_error": -7.62,
+      "n": 1447
+    },
+    "Beverages": {
+      "mean_error": -6.29,
+      "n": 2499
+    },
+    "Composite foods": {
+      "mean_error": -4.95,
+      "n": 2811
+    },
+    "Cereals and potatoes": {
+      "mean_error": -4.59,
+      "n": 2077
+    },
+    "Fat and sauces": {
+      "mean_error": -4.46,
+      "n": 1142
+    },
+    "sugary-snacks": {
+      "mean_error": -4.22,
+      "n": 279
+    },
+    "Sugary snacks": {
+      "mean_error": -1.09,
+      "n": 4887
+    },
+    "Milk and dairy products": {
+      "mean_error": -0.35,
+      "n": 3088
+    },
+    "Fruits and vegetables": {
+      "mean_error": 0.6,
+      "n": 492
+    }
+  }
+}

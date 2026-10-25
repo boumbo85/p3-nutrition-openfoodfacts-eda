@@ -1,0 +1,22 @@
+{
+  "n_total": 155395,
+  "counts": {
+    "impossible_bounds": 0,
+    "sugars_over_carbs": 521,
+    "satfat_over_fat": 215,
+    "mass_balance_over_100": 1353,
+    "energy_below_floor": 2335,
+    "empty_product": 3834,
+    "invalid_name": 11,
+    "atwater_inconsistent": 2715,
+    "unit_error_kcal_as_kj": 797,
+    "dry_matter_implausible": 13340
+  },
+  "n_hard_violations": 8141,
+  "fiber_zero_rate": 0.4526,
+  "n_after_clean": 147254,
+  "n_removed": 8141,
+  "pct_removed": 5.24,
+  "atwater_flagged_kept": 1395,
+  "output_csv": "data/physically_clean.csv"
+}

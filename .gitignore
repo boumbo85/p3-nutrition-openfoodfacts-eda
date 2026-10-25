@@ -2,6 +2,8 @@
 data/*.csv
 data/*.tsv
 *.zip
+# Exception : l'échantillon léger de démo EST versionné (pour Streamlit Cloud)
+!data/demo_sample.csv
 
 # ─── Gros binaires (slides de soutenance — hors versionnement) ───
 docs/presentation.pdf

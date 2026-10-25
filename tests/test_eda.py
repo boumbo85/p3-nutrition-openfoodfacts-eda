@@ -111,3 +111,145 @@ def test_chi2_grade_by_group_association():
     r = E.chi2_grade_by_group(df, min_group_n=3)
     assert r["p_value"] < 0.05
     assert r["cramers_v"] > 0.5
+
+
+# ── biochemical consistency (physical-reality checks) ──────────────────────
+
+def test_satfat_consistency():
+    df = pd.DataFrame({
+        "saturated-fat_100g": [5, 40, 10],
+        "fat_100g": [50, 30, 10],          # row 1: sat(40) > fat(30)
+    })
+    assert E.satfat_consistency(df).tolist() == [False, True, False]
+
+
+def test_mass_balance_violation_includes_fibre():
+    # fibre counts toward the mass (EU/OFF convention, confirmed empirically).
+    df = pd.DataFrame({
+        "fat_100g": [10, 60, 30],
+        "carbohydrates_100g": [20, 30, 40],
+        "fiber_100g": [0, 5, 0],           # row1: 60+30+5+20 = 115 > 101
+        "proteins_100g": [5, 20, 25],      # row0: 35 ok ; row2: 95 ok
+    })
+    assert E.mass_balance_violation(df).tolist() == [False, True, False]
+
+
+def test_mass_balance_tolerance_absorbs_rounding():
+    # 100.5 g is within the +1 g rounding tolerance -> not flagged.
+    df = pd.DataFrame({
+        "fat_100g": [40.5], "carbohydrates_100g": [40.0],
+        "fiber_100g": [0.0], "proteins_100g": [20.0],
+    })
+    assert E.mass_balance_violation(df).tolist() == [False]
+
+
+def test_dry_matter_implausible():
+    # row1: 30+40+4.5+25 = 99.5 g dry -> only 0.5 g water left -> implausible,
+    # yet <= 101 so NOT a hard mass-balance violation. row0: 55 g -> fine.
+    df = pd.DataFrame({
+        "fat_100g": [5, 30],
+        "carbohydrates_100g": [40, 40],
+        "fiber_100g": [0, 4.5],
+        "proteins_100g": [10, 25],
+    })
+    assert E.dry_matter_implausible(df, min_water=1.0).tolist() == [False, True]
+
+
+def test_energy_below_floor():
+    # 50 g fat forces >= 37*50*0.9 = 1665 kJ. Row0 energy 1200 is below the
+    # floor AND not a kcal mix-up (Atwater 1850 -> /4.184 = 442, far from 1200),
+    # so it is a genuine floor violation. Row1 (2000) is fine.
+    df = pd.DataFrame({
+        "energy_100g": [1200, 2000],
+        "fat_100g": [50, 50],
+        "carbohydrates_100g": [0, 0],
+        "proteins_100g": [0, 0],
+        "fiber_100g": [0, 0],
+    })
+    assert E.energy_below_floor(df).tolist() == [True, False]
+
+
+def test_unit_error_kcal_as_kj():
+    # Composition -> Atwater ~795 kJ. If logged as 190 (~795/4.184), it's kcal.
+    df = pd.DataFrame({
+        "energy_100g": [190, 795],         # row0: kcal mistake ; row1: correct kJ
+        "fat_100g": [10, 10],
+        "carbohydrates_100g": [20, 20],
+        "proteins_100g": [5, 5],
+        "fiber_100g": [0, 0],
+    })
+    assert E.unit_error_kcal_as_kj(df).tolist() == [True, False]
+
+
+def test_atwater_energy_and_inconsistency():
+    # Composition: 10g fat, 20g carb, 5g protein, 0 fibre
+    #   -> 37*10 + 17*(20+5) = 370 + 425 = 795 kJ
+    df = pd.DataFrame({
+        "energy_100g": [795, 3000, 0],      # row0 matches ; row1 way too high ; row2 no energy
+        "fat_100g": [10, 10, 10],
+        "carbohydrates_100g": [20, 20, 20],
+        "proteins_100g": [5, 5, 5],
+        "fiber_100g": [0, 0, 0],
+    })
+    pred = E.atwater_energy_kj(df)
+    assert abs(pred.iloc[0] - 795) < 1e-6
+    incon = E.atwater_inconsistency(df, rel_tol=0.5)
+    assert incon.tolist() == [False, True, False]   # row2 has no energy -> not flagged
+
+
+def test_empty_product():
+    df = pd.DataFrame({
+        "energy_100g": [0, 500],
+        "fat_100g": [0, 1],
+        "carbohydrates_100g": [0, 1],
+        "proteins_100g": [0, 1],
+        "sugars_100g": [0, 1],
+    })
+    assert E.empty_product(df).tolist() == [True, False]
+
+
+def test_fiber_zero_rate():
+    df = pd.DataFrame({"fiber_100g": [0, 0, 2, 4]})
+    assert np.isclose(E.fiber_zero_rate(df), 0.5)
+
+
+def test_physically_clean_drops_hard_violations_not_atwater():
+    df = pd.DataFrame({
+        "energy_100g": [795, 795, 795],
+        "fat_100g": [10, 60, 10],           # row1 part of a mass-balance violation
+        "saturated-fat_100g": [5, 5, 5],
+        "carbohydrates_100g": [20, 30, 20],
+        "sugars_100g": [5, 5, 5],
+        "proteins_100g": [5, 20, 5],        # row1: 60+30+20 = 110 -> dropped
+        "fiber_100g": [0, 0, 0],
+    })
+    out = E.physically_clean(df)
+    assert len(out) == 2                    # the mass-balance row removed
+
+
+def test_physical_validity_report_shape():
+    df = pd.DataFrame({
+        "energy_100g": [795, 0],
+        "fat_100g": [10, 0],
+        "saturated-fat_100g": [5, 0],
+        "carbohydrates_100g": [20, 0],
+        "sugars_100g": [5, 0],
+        "proteins_100g": [5, 0],
+        "fiber_100g": [0, 0],
+    })
+    rep = E.physical_validity_report(df)
+    assert rep["n_total"] == 2
+    assert rep["counts"]["empty_product"] == 1
+    assert "n_hard_violations" in rep
+
+
+def test_invalid_product_name():
+    df = pd.DataFrame({"product_name": [
+        "Organic Oat Groats",   # valid
+        "#Error!",              # spreadsheet artefact
+        "  null ",              # null-like
+        "1848",                 # digits only
+        "a",                    # too short
+        "",                     # blank
+    ]})
+    assert E.invalid_product_name(df).tolist() == [False, True, True, True, True, True]

@@ -70,6 +70,278 @@ def sugar_consistency(df: pd.DataFrame) -> pd.Series:
     return (s > c + 1e-6).fillna(False)
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# Biochemical consistency — physical laws a real food must obey.
+#
+# Per-column bounds (above) catch "sugar = 900 g". These cross-field checks
+# catch foods that look fine column-by-column yet break a physical law:
+#   * a subset cannot exceed its set (saturated fat ≤ fat, sugars ≤ carbs),
+#   * the macronutrients cannot weigh more than the food (mass balance),
+#   * declared energy must match the Atwater energy of the composition.
+# These are the checks a nutritionist/biochemist would run before trusting
+# the table — and the ones the 2022 pass never did.
+# ──────────────────────────────────────────────────────────────────────────
+
+# Atwater factors, kJ per gram (FAO): carbohydrate & protein 17, fat 37,
+# fibre 8. Used to recompute energy from the composition.
+_ATWATER_KJ = {"carb": 17.0, "protein": 17.0, "fat": 37.0, "fibre": 8.0}
+
+
+def _num0(df: pd.DataFrame, col: str) -> pd.Series:
+    """Numeric column with NaN→0 (absent column → all zeros)."""
+    if col not in df.columns:
+        return pd.Series(0.0, index=df.index)
+    return pd.to_numeric(df[col], errors="coerce").fillna(0)
+
+# Mass-balance tolerance: labels round to the gram, so allow +1 g/100g of
+# rounding slack before calling fat+carb+protein > 100 a physical impossibility.
+MASS_BALANCE_TOL = 1.0
+
+
+def satfat_consistency(df: pd.DataFrame) -> pd.Series:
+    """Mask of rows where saturated fat exceeds total fat (impossible).
+
+    Saturated fat is a subset of total fat, so ``saturated-fat_100g`` can never
+    exceed ``fat_100g``. The mirror of :func:`sugar_consistency`, missing from
+    the original cleaning pass.
+    """
+    if "saturated-fat_100g" not in df.columns or "fat_100g" not in df.columns:
+        return pd.Series(False, index=df.index)
+    sat = pd.to_numeric(df["saturated-fat_100g"], errors="coerce")
+    fat = pd.to_numeric(df["fat_100g"], errors="coerce")
+    return (sat > fat + 1e-6).fillna(False)
+
+
+def mass_balance_violation(df: pd.DataFrame, tol: float = MASS_BALANCE_TOL) -> pd.Series:
+    """Mask of rows where fat + carbohydrates + fibre + protein exceed 100 g/100g.
+
+    These are physical fractions of the product, so their sum cannot exceed the
+    product's own mass (the remainder is water, salt and ash).
+
+    **Fibre is counted only when it is clearly reported separately** from
+    carbohydrates. Open Food Facts is crowdsourced and mixes both conventions
+    (EU: fibre apart from carbs; US: fibre inside carbs). Empirically, 95% of
+    the rows where adding fibre would create a violation satisfy
+    ``sugars+fibre ≤ carbs`` — i.e. fibre is already inside the carbohydrate
+    figure there, so adding it would double-count. We therefore add fibre
+    per-row only when ``sugars+fibre > carbs`` (fibre demonstrably outside
+    carbs); otherwise fibre is treated as already included. A ``tol`` of 1 g
+    absorbs label rounding.
+    """
+    need = ["fat_100g", "carbohydrates_100g", "proteins_100g"]
+    if not all(c in df.columns for c in need):
+        return pd.Series(False, index=df.index)
+    fat = _num0(df, "fat_100g")
+    carb = _num0(df, "carbohydrates_100g")
+    prot = _num0(df, "proteins_100g")
+    fib = _num0(df, "fiber_100g")
+    sug = _num0(df, "sugars_100g")
+    # fibre outside carbs only where sugars+fibre exceeds carbs
+    fibre_outside = (sug + fib) > (carb + 1e-6)
+    total = fat + carb + prot + fib.where(fibre_outside, 0.0)
+    return (total > 100.0 + tol).fillna(False)
+
+
+def dry_matter_implausible(df: pd.DataFrame, min_water: float = 1.0) -> pd.Series:
+    """Mask of rows leaving physically implausibly little room for water.
+
+    Almost every food contains water (even dried goods keep a few %). If
+    fat+carb+fibre+protein already fills 100 g/100g, there is *no room* for the
+    water a real food must contain. We flag rows whose dry-matter sum exceeds
+    ``100 - min_water`` g (default: less than 1 g of water left) — stricter than
+    the mass-balance check, catching 'suspiciously bone-dry' compositions a
+    plain >100 g test lets through (e.g. a yoghurt logged at 98 g of macros).
+    """
+    cols = ["fat_100g", "carbohydrates_100g", "fiber_100g", "proteins_100g"]
+    present = [c for c in cols if c in df.columns]
+    if not present:
+        return pd.Series(False, index=df.index)
+    dry = sum(_num0(df, c) for c in present)
+    hard = mass_balance_violation(df)
+    # Exclude legitimately dry single-component foods (oil, sugar, pure starch):
+    # if one macro alone is ≥ 90 g, the low water content is real, not an error.
+    pure = pd.Series(False, index=df.index)
+    for c in ["fat_100g", "carbohydrates_100g", "proteins_100g"]:
+        pure |= _num0(df, c) >= 90.0
+    return ((dry > 100.0 - min_water) & ~hard & ~pure).fillna(False)
+
+
+def atwater_energy_kj(df: pd.DataFrame) -> pd.Series:
+    """Energy (kJ/100g) recomputed from composition via Atwater factors."""
+    def col(c: str) -> pd.Series:
+        return pd.to_numeric(df[c], errors="coerce").fillna(0) if c in df.columns \
+            else pd.Series(0.0, index=df.index)
+    return (
+        _ATWATER_KJ["carb"] * col("carbohydrates_100g")
+        + _ATWATER_KJ["protein"] * col("proteins_100g")
+        + _ATWATER_KJ["fat"] * col("fat_100g")
+        + _ATWATER_KJ["fibre"] * col("fiber_100g")
+    )
+
+
+def atwater_inconsistency(df: pd.DataFrame, rel_tol: float = 0.5) -> pd.Series:
+    """Mask of rows whose declared energy disagrees with its Atwater energy.
+
+    The declared ``energy_100g`` should match the energy recomputed from the
+    macronutrients. A relative gap beyond ``rel_tol`` (default 50%) means either
+    the energy or a macro is wrong — we cannot tell which, so these are *flagged*
+    for review rather than assumed-correct. Rows with no declared energy or an
+    all-zero composition are not flagged (nothing to compare).
+    """
+    if "energy_100g" not in df.columns:
+        return pd.Series(False, index=df.index)
+    e = pd.to_numeric(df["energy_100g"], errors="coerce")
+    pred = atwater_energy_kj(df)
+    valid = e.notna() & (e > 0) & (pred > 0)
+    rel = (e - pred).abs() / e.where(e > 0)
+    return (valid & (rel > rel_tol)).fillna(False)
+
+
+def energy_below_floor(df: pd.DataFrame, slack: float = 0.7) -> pd.Series:
+    """Mask of rows whose declared energy is below the incompressible minimum.
+
+    Every macronutrient has a minimum energy density (fat 37, carb/protein 17,
+    fibre 8 kJ/g), so the declared energy cannot fall far below the Atwater sum.
+    We flag only energies below ``slack`` × that minimum (default 0.7, i.e. more
+    than 30% too low) — a conservative threshold that keeps genuine
+    impossibilities while sparing fibre-rich dry foods (cereals, bran) whose
+    energy legitimately sits just under the naive fat+carb+protein floor because
+    fibre and the spread in Atwater factors are not exactly known. kcal↔kJ unit
+    errors are excluded (they are correctable, not impossible).
+    """
+    if "energy_100g" not in df.columns:
+        return pd.Series(False, index=df.index)
+    e = pd.to_numeric(df["energy_100g"], errors="coerce")
+    floor = atwater_energy_kj(df)  # includes fibre energy — fewer false positives
+    below = e.notna() & (floor > 0) & (e < slack * floor)
+    return (below & ~unit_error_kcal_as_kj(df)).fillna(False)
+
+
+def unit_error_kcal_as_kj(df: pd.DataFrame, rel_tol: float = 0.25) -> pd.Series:
+    """Mask of rows whose energy was likely entered in kcal but stored as kJ.
+
+    A classic Open Food Facts data-entry error: 1 kcal = 4.184 kJ, so an energy
+    mistakenly logged in kcal reads ~4.18× too low. We flag rows where the
+    declared energy is close to Atwater/4.184 (within ``rel_tol``) **and** far
+    from the correct Atwater value — the signature of a kcal↔kJ mix-up rather
+    than random noise. A very 'metier' check: only someone who knows the dataset
+    spots it.
+    """
+    if "energy_100g" not in df.columns:
+        return pd.Series(False, index=df.index)
+    e = pd.to_numeric(df["energy_100g"], errors="coerce")
+    pred_kj = atwater_energy_kj(df)
+    valid = e.notna() & (e > 0) & (pred_kj > 0)
+    looks_kcal = (e - pred_kj / 4.184).abs() / pred_kj < rel_tol
+    not_kj = (e - pred_kj).abs() / pred_kj > rel_tol
+    return (valid & looks_kcal & not_kj).fillna(False)
+
+
+def empty_product(df: pd.DataFrame) -> pd.Series:
+    """Mask of 'ghost' rows: energy and every macronutrient are zero.
+
+    A real food is almost never 0 kJ with 0 fat/carb/protein/sugar — even
+    flavoured water carries traces. These are empty records, not foods.
+    """
+    cols = ["energy_100g", "fat_100g", "carbohydrates_100g", "proteins_100g", "sugars_100g"]
+    present = [c for c in cols if c in df.columns]
+    if not present:
+        return pd.Series(False, index=df.index)
+    mask = pd.Series(True, index=df.index)
+    for c in present:
+        mask &= pd.to_numeric(df[c], errors="coerce").fillna(0) == 0
+    return mask
+
+
+# Spreadsheet-export artefacts and null-like strings that are not real names.
+_INVALID_NAMES = {
+    "#error!", "#ref!", "#value!", "#name?", "#n/a", "#div/0!",
+    "nan", "null", "none", "unknown", "n/a", "na", "",
+}
+
+
+def invalid_product_name(df: pd.DataFrame, col: str = "product_name") -> pd.Series:
+    """Mask of rows whose product name is not a usable name.
+
+    Catches spreadsheet-export artefacts (``#Error!``, ``#REF!``), null-like
+    strings, blanks, names shorter than 2 characters, and names made only of
+    digits/punctuation. Marginal in count but a clean normalisation step: a
+    record you cannot name is not a usable product.
+    """
+    if col not in df.columns:
+        return pd.Series(False, index=df.index)
+    s = df[col].astype("string").str.strip()
+    low = s.str.lower()
+    bad = low.isin(_INVALID_NAMES) | low.isna()
+    bad |= s.str.len() < 2
+    bad |= s.str.fullmatch(r"[\d\W]+", na=False)   # only digits / punctuation
+    return bad.fillna(True)
+
+
+def fiber_zero_rate(df: pd.DataFrame) -> float:
+    """Share of rows with fibre exactly 0 — the imputation smell.
+
+    ``fiber_100g`` is 100% filled, which is suspicious for a field that is
+    usually missing. A high exact-zero rate signals missing values imputed as 0,
+    which biases any fibre-based analysis (and the Nutri-Score fibre points).
+    """
+    if "fiber_100g" not in df.columns:
+        return 0.0
+    f = pd.to_numeric(df["fiber_100g"], errors="coerce")
+    n = f.notna().sum()
+    return float((f == 0).sum() / n) if n else 0.0
+
+
+def physical_validity_report(df: pd.DataFrame) -> dict:
+    """Count every biochemical violation — the audit a nutritionist would run."""
+    checks = {
+        # hard impossibilities (dropped from the clean extract)
+        "impossible_bounds": flag_impossible_nutrients(df),
+        "sugars_over_carbs": sugar_consistency(df),
+        "satfat_over_fat": satfat_consistency(df),
+        "mass_balance_over_100": mass_balance_violation(df),
+        "energy_below_floor": energy_below_floor(df),
+        "empty_product": empty_product(df),
+        "invalid_name": invalid_product_name(df),
+        # soft signals (flagged for review, kept)
+        "atwater_inconsistent": atwater_inconsistency(df),
+        "unit_error_kcal_as_kj": unit_error_kcal_as_kj(df),
+        "dry_matter_implausible": dry_matter_implausible(df),
+    }
+    any_hard = (
+        checks["impossible_bounds"] | checks["sugars_over_carbs"]
+        | checks["satfat_over_fat"] | checks["mass_balance_over_100"]
+        | checks["energy_below_floor"] | checks["empty_product"]
+        | checks["invalid_name"]
+    )
+    return {
+        "n_total": int(len(df)),
+        "counts": {k: int(v.sum()) for k, v in checks.items()},
+        "n_hard_violations": int(any_hard.sum()),
+        "fiber_zero_rate": round(fiber_zero_rate(df), 4),
+    }
+
+
+def physically_clean(df: pd.DataFrame) -> pd.DataFrame:
+    """Return the physically-valid extract.
+
+    Drops *hard* impossibilities (out-of-bounds values, subset violations,
+    mass-balance > 100 g, empty records). Atwater inconsistencies are NOT
+    dropped here — they are flagged by :func:`atwater_inconsistency` for review,
+    since we cannot know whether the energy or a macro is the wrong field.
+    """
+    drop = (
+        flag_impossible_nutrients(df)
+        | sugar_consistency(df)
+        | satfat_consistency(df)
+        | mass_balance_violation(df)
+        | energy_below_floor(df)
+        | empty_product(df)
+        | invalid_product_name(df)
+    )
+    return df[~drop].copy()
+
+
 def nutriscore_grade_counts(df: pd.DataFrame, col: str = "nutrition_grade_fr") -> dict:
     """Distribution of Nutri-Score grades (a–e), lowercased, NaN excluded."""
     if col not in df.columns:
