@@ -5,7 +5,7 @@
 ![status](https://img.shields.io/badge/status-completed-success)
 ![license](https://img.shields.io/badge/license-MIT-lightgrey)
 
-> **The result:** reconstructing the official Nutri-Score from raw nutrients lands **40%** of products on the exact grade. Recovering the two inputs a naïve reconstruction ignores — **salt** and the **fruit/vegetable %** — pushes the match to **95% within one grade** and cuts the systematic bias from **−4.83 to −1.68 points**. The gap between those two numbers *is* the measured weight of salt and produce in the formula.
+> **The result:** reconstructing the official Nutri-Score from raw nutrients lands **40%** of products on the exact grade. Recovering the two inputs a naïve reconstruction ignores — **salt** and the **fruit/vegetable %** — pushes the match to **95% within one grade** and cuts the systematic bias from **−4.83 to −1.68 points**. The gap between those two numbers *is* the measured weight of salt and produce in the formula. The remaining **−1.68** is left honestly unattributed: part of it is the 2017↔2023 formula change the data cannot separate from the missing inputs (see §4).
 >
 > Built on a biochemically-cleaned extract of the **French Open Food Facts** catalogue (2026 snapshot): **956,514 products → 880,087 kept**, with only **0.75 %** removed for breaking a physical law (the rest are empty crowdsourced records).
 
@@ -114,7 +114,7 @@ p3-nutrition-openfoodfacts-eda/
 │   └── make_clean_extract.py  # physically-clean extract + audit report (+ bootstrap)
 ├── app/
 │   └── streamlit_app.py    # interactive demo
-├── tests/                  # pytest — cleaning, biochemistry, Nutri-Score (43 tests)
+├── tests/                  # pytest — cleaning, biochemistry, Nutri-Score (45 tests)
 ├── data/README.md          # source + license (data not versioned)
 └── docs/figures/           # dark SVG charts
 ```
@@ -149,7 +149,7 @@ streamlit run app/streamlit_app.py
 ```bash
 pip install -r requirements-dev.txt
 ruff check src tests app
-pytest -q          # 43 tests on pure logic, no dataset needed
+pytest -q          # 45 tests on pure logic, no dataset needed
 ```
 
 ## 📦 Data
@@ -164,7 +164,7 @@ The original 2022 extract predates the salt and fruit/vegetable columns needed t
 
 # 🇫🇷 Version française
 
-> **Le résultat :** reconstruire le Nutri-Score officiel à partir des seuls nutriments place **40 %** des produits sur le grade exact. En récupérant les deux entrées qu'une reconstruction naïve ignore — le **sel** et le **% fruits/légumes** — on atteint **95 % à un grade près** et le biais systématique tombe de **−4,83 à −1,68 point**. L'écart entre ces deux chiffres *est* le poids mesuré du sel et des fruits/légumes dans la formule.
+> **Le résultat :** reconstruire le Nutri-Score officiel à partir des seuls nutriments place **40 %** des produits sur le grade exact. En récupérant les deux entrées qu'une reconstruction naïve ignore — le **sel** et le **% fruits/légumes** — on atteint **95 % à un grade près** et le biais systématique tombe de **−4,83 à −1,68 point**. L'écart entre ces deux chiffres *est* le poids mesuré du sel et des fruits/légumes dans la formule. Le **−1,68** restant n'est **pas** imputé aux seules données manquantes : une partie est le changement de barème 2017↔2023, que la donnée ne permet pas de séparer (voir §4).
 >
 > Le tout sur un extrait d'Open Food Facts **France** nettoyé par la biochimie (instantané 2026) : **956 514 produits → 880 087 gardés**, dont seulement **0,75 %** retirés pour violation d'une loi physique (le reste = fiches vides du crowdsourcing).
 
