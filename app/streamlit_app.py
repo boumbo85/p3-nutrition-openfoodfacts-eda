@@ -73,6 +73,19 @@ def points_table(row: pd.Series) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def grade_scale_text(is_beverage: bool = False) -> str:
+    """Human-readable 'points → grade' scale, derived from the single source of
+    truth (``N._GRADE_BANDS``) so the legend can never drift from the code."""
+    bands = N._BEV_GRADE_BANDS if is_beverage else N._GRADE_BANDS
+    parts, prev = [], None
+    for upper, grade in bands:
+        span = f"≤ {upper}" if prev is None else f"{prev + 1} to {upper}"
+        parts.append(f"**{grade.upper()}** {span}")
+        prev = upper
+    parts.append(f"**E** ≥ {bands[-1][0] + 1}")
+    return "  ·  ".join(parts)
+
+
 def main() -> None:
     st.set_page_config(page_title="Nutri-Score explorer", page_icon="🥗", layout="wide")
     st.title("🥗 Nutri-Score explorer")
@@ -135,6 +148,13 @@ def main() -> None:
     with left:
         st.markdown("#### What drives the score")
         st.dataframe(points_table(row), hide_index=True, use_container_width=True)
+        is_bev = str(row.get("pnns_groups_1", "")).strip().lower() == "beverages"
+        st.markdown(
+            "**Score = penalties − bonuses.** A *lower* score is healthier: "
+            "bonuses (fibre, protein, fruit/veg) pull it down, penalties push it up."
+        )
+        st.caption(("Beverage scale — " if is_bev else "Score → grade — ")
+                   + grade_scale_text(is_beverage=is_bev))
     with right:
         st.markdown("#### A healthier option, same category")
         alt = N.healthier_alternative(df, choice, n=3)
